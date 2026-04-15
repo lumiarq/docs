@@ -153,6 +153,34 @@ pnpm lumis auth:install --ui react
 pnpm lumis stub:publish --all
 ```
 
+### About the wrapper layer
+
+When you run `pnpm lumis` from a Lumiarq app, you're using the `@illumiarq/lumis` wrapper package, which extends the base `@lumiarq/lumis` CLI with app-specific commands.
+
+The wrapper **intercepts** three runtime commands locally:
+
+- `serve` — compiles views, caches routes, bundles output, starts dev server
+- `build` — with optional `--target` flag (node, cloudflare, static)
+- `preview` — with optional `--target` flag (node, cloudflare, static)
+
+All other commands (info, health, make:*, db:*, etc.) are **delegated** to the base `@lumiarq/lumis` CLI.
+
+**Flag shortcuts for runtime commands:**
+
+```shell
+# All equivalent — use whichever feels natural
+pnpm lumis build --target static
+pnpm lumis build --to static
+pnpm lumis build --t static
+pnpm lumis build -t static
+
+# Port and host shortcuts for serve
+pnpm lumis serve --port 4000 --host 0.0.0.0
+pnpm lumis serve -p 4000 -H 0.0.0.0
+```
+
+For `preview` and `build`, when target is `node`, the wrapper handles the flow locally. For `static` and `cloudflare`, the wrapper delegates to pnpm run scripts (e.g., `build:static`, `build:cloudflare`) defined in your `package.json`.
+
 <a name="tinker"></a>
 ## Tinker
 

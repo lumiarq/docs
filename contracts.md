@@ -301,9 +301,10 @@ The `Logger` accessor is the application-level logger (registered in `bootstrap/
 ```ts
 import { Logger } from '@lumiarq/framework'
 import { getContext } from '@lumiarq/framework'
+import { env } from '@/bootstrap/env'
 
 // Application logger (not request-scoped)
-Logger.info('Application booted', { env: process.env.NODE_ENV })
+Logger.info('Application booted', { env: env.NODE_ENV })
 
 // Request-scoped logger (preferred inside handlers/actions/tasks)
 const { logger } = getContext()
@@ -391,21 +392,22 @@ Provider registrations live in `bootstrap/providers.ts`. Swapping one implementa
 ```ts
 // bootstrap/providers.ts
 import { registerProvider } from '@lumiarq/framework'
+import { env } from '@/bootstrap/env'
 import { NodeMailerProvider } from '@lumiarq/mailer-nodemailer'
 import { SesMailerProvider } from '@lumiarq/mailer-ses'
 import { RedisQueueProvider } from '@lumiarq/queue-redis'
 import { StubQueueProvider } from '@lumiarq/queue-stub'
 
 // Swap SMTP → SES based on environment
-const MailProvider = process.env.MAIL_DRIVER === 'ses'
-  ? new SesMailerProvider({ region: process.env.AWS_REGION! })
-  : new NodeMailerProvider({ host: process.env.SMTP_HOST! })
+const MailProvider = env.MAIL_DRIVER === 'ses'
+  ? new SesMailerProvider({ region: env.AWS_REGION! })
+  : new NodeMailerProvider({ host: env.SMTP_HOST! })
 
 registerProvider('mailer', MailProvider)
 
 // Use real Redis in production, stub in development
-const QueueProvider = process.env.NODE_ENV === 'production'
-  ? new RedisQueueProvider({ url: process.env.REDIS_URL! })
+const QueueProvider = env.NODE_ENV === 'production'
+  ? new RedisQueueProvider({ url: env.REDIS_URL! })
   : new StubQueueProvider()
 
 registerProvider('queue', QueueProvider)

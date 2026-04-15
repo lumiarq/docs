@@ -32,6 +32,7 @@ Configure caching in `config/cache.ts`:
 
 ```typescript
 import type { CacheConfig } from '@lumiarq/framework'
+import { env } from '@/bootstrap/env'
 
 export default {
   default: 'redis',
@@ -39,7 +40,7 @@ export default {
   stores: {
     redis: {
       driver: 'redis',
-      url: process.env.REDIS_URL ?? 'redis://localhost:6379',
+      url: env.REDIS_URL ?? 'redis://localhost:6379',
       prefix: 'myapp:',
       ttl: 3600,        // Default TTL in seconds
     },

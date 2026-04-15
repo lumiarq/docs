@@ -167,6 +167,7 @@ import {
   writeFlash,
   buildBackResponse,
 } from '@lumiarq/framework'
+import { env } from '@/bootstrap/env'
 
 export const StoreInvoiceHandler = defineHandler(async (ctx) => {
   const body   = await ctx.req.parseBody()
@@ -179,7 +180,7 @@ export const StoreInvoiceHandler = defineHandler(async (ctx) => {
     await writeOld(sessionId, sessionStore, body)
     await writeFlash(sessionId, sessionStore, 'errors', result.error.flatten().fieldErrors)
 
-    return buildBackResponse(ctx.req.raw, '/invoices/create', process.env.APP_URL!)
+    return buildBackResponse(ctx.req.raw, '/invoices/create', env.APP_URL)
   }
 
   await CreateInvoiceAction(result.data)

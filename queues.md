@@ -31,13 +31,14 @@ Queue settings live in `config/queue.ts`:
 ```typescript
 // config/queue.ts
 import type { QueueConfig } from '@lumiarq/framework'
+import { env } from '@/bootstrap/env'
 
 export default {
-  driver: process.env.QUEUE_DRIVER ?? 'sync',
+  driver: env.QUEUE_DRIVER ?? 'sync',
   connection: {
-    host: process.env.REDIS_HOST ?? '127.0.0.1',
-    port: Number(process.env.REDIS_PORT ?? 6379),
-    password: process.env.REDIS_PASSWORD,
+    host: env.REDIS_HOST ?? '127.0.0.1',
+    port: Number(env.REDIS_PORT ?? 6379),
+    password: env.REDIS_PASSWORD,
   },
   defaultQueue: 'default',
   queues: {
@@ -230,8 +231,10 @@ When a task throws an unhandled error, the queue driver retries it according to 
 
 ```typescript
 // config/queue.ts
+import { env } from '@/bootstrap/env'
+
 export default {
-  driver: process.env.QUEUE_DRIVER ?? 'sync',
+  driver: env.QUEUE_DRIVER ?? 'sync',
   queues: {
     default: {
       concurrency:  5,

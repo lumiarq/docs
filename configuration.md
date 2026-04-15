@@ -28,12 +28,13 @@ Configuration files use TypeScript's `satisfies` operator instead of a helper fu
 
 ```typescript
 import type { AppConfig } from '@lumiarq/framework';
+import { env } from '@/bootstrap/env';
 
 export default {
   name: 'My App',
-  url: process.env.APP_URL ?? 'http://localhost:4000',
-  env: process.env.APP_ENV ?? 'local',
-  debug: process.env.APP_DEBUG === 'true',
+  url: env.APP_URL,
+  env: env.APP_ENV,
+  debug: env.APP_DEBUG === 'true',
   locale: 'en',
 } satisfies AppConfig;
 ```
@@ -77,13 +78,14 @@ General application settings: name, URL, environment, debug flag, and locale.
 
 ```typescript
 import type { AppConfig } from '@lumiarq/framework';
+import { env } from '@/bootstrap/env';
 
 export default {
-  name: process.env.APP_NAME ?? 'Lumiarq App',
-  url: process.env.APP_URL ?? 'http://localhost:4000',
-  env: process.env.APP_ENV ?? 'local',
-  key: process.env.APP_KEY ?? '',
-  debug: process.env.APP_DEBUG === 'true',
+  name: env.APP_NAME ?? 'Lumiarq App',
+  url: env.APP_URL,
+  env: env.APP_ENV,
+  key: env.APP_KEY ?? '',
+  debug: env.APP_DEBUG === 'true',
   locale: 'en',
   fallbackLocale: 'en',
   timezone: 'UTC',
@@ -96,13 +98,14 @@ Authentication settings: JWT algorithm and expiry, session lifetime, bcrypt roun
 
 ```typescript
 import type { AuthConfig } from '@lumiarq/framework';
+import { env } from '@/bootstrap/env';
 
 export default {
   driver: 'jwt',
   jwt: {
     algorithm: 'RS256',
-    privateKey: process.env.JWT_PRIVATE_KEY ?? '',
-    publicKey: process.env.JWT_PUBLIC_KEY ?? '',
+    privateKey: env.JWT_PRIVATE_KEY ?? '',
+    publicKey: env.JWT_PUBLIC_KEY ?? '',
     expiresIn: '15m',
   },
   session: {
@@ -121,13 +124,14 @@ Database connection settings. Lumiarq supports multiple named connections; the `
 
 ```typescript
 import type { DatabaseConfig } from '@lumiarq/framework';
+import { env } from '@/bootstrap/env';
 
 export default {
   default: 'sqlite',
   connections: {
     sqlite: {
       driver: 'sqlite',
-      url: process.env.DATABASE_URL ?? 'file:./database/app.db',
+      url: env.DATABASE_URL ?? 'file:./database/app.db',
     },
   },
 } satisfies DatabaseConfig;
@@ -139,11 +143,11 @@ To configure a second connection (for example, a read replica or a separate anal
 connections: {
   sqlite: {
     driver: 'sqlite',
-    url: process.env.DATABASE_URL ?? 'file:./database/app.db',
+    url: env.DATABASE_URL ?? 'file:./database/app.db',
   },
   analytics: {
     driver: 'sqlite',
-    url: process.env.ANALYTICS_DATABASE_URL ?? 'file:./database/analytics.db',
+    url: env.ANALYTICS_DATABASE_URL ?? 'file:./database/analytics.db',
   },
 },
 ```
@@ -156,22 +160,23 @@ Outgoing mail settings.
 
 ```typescript
 import type { MailConfig } from '@lumiarq/framework';
+import { env } from '@/bootstrap/env';
 
 export default {
   default: 'smtp',
   mailers: {
     smtp: {
       driver: 'smtp',
-      host: process.env.MAIL_HOST ?? 'localhost',
-      port: Number(process.env.MAIL_PORT ?? 1025),
-      username: process.env.MAIL_USERNAME,
-      password: process.env.MAIL_PASSWORD,
+      host: env.MAIL_HOST ?? 'localhost',
+      port: Number(env.MAIL_PORT ?? 1025),
+      username: env.MAIL_USERNAME,
+      password: env.MAIL_PASSWORD,
       encryption: undefined,
     },
   },
   from: {
-    address: process.env.MAIL_FROM_ADDRESS ?? 'hello@example.com',
-    name: process.env.MAIL_FROM_NAME ?? 'My App',
+    address: env.MAIL_FROM_ADDRESS ?? 'hello@example.com',
+    name: env.MAIL_FROM_NAME ?? 'My App',
   },
 } satisfies MailConfig;
 ```
@@ -201,6 +206,7 @@ File storage settings.
 
 ```typescript
 import type { StorageConfig } from '@lumiarq/framework';
+import { env } from '@/bootstrap/env';
 
 export default {
   default: 'local',
@@ -212,7 +218,7 @@ export default {
     public: {
       driver: 'local',
       root: './storage/app/public',
-      url: process.env.APP_URL + '/storage',
+      url: env.APP_URL + '/storage',
     },
   },
 } satisfies StorageConfig;
@@ -242,6 +248,7 @@ Session storage and cookie settings.
 
 ```typescript
 import type { SessionConfig } from '@lumiarq/framework';
+import { env } from '@/bootstrap/env';
 
 export default {
   driver: 'database',
@@ -251,10 +258,10 @@ export default {
     name: 'session',
     path: '/',
     sameSite: 'lax',
-    secure: process.env.APP_ENV === 'production',
+    secure: env.APP_ENV === 'production',
     httpOnly: true,
   },
-  secret: process.env.SESSION_SECRET ?? '',
+  secret: env.SESSION_SECRET ?? '',
 } satisfies SessionConfig;
 ```
 
@@ -264,10 +271,11 @@ CORS, rate limiting, and trusted proxy settings.
 
 ```typescript
 import type { SecurityConfig } from '@lumiarq/framework';
+import { env } from '@/bootstrap/env';
 
 export default {
   cors: {
-    origin: process.env.APP_URL ?? 'http://localhost:4000',
+    origin: env.APP_URL,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -282,21 +290,29 @@ export default {
 
 ### `config/logging.ts`
 
-Log channel and level settings.
+Runtime logger channel and level settings.
 
 ```typescript
 import type { LoggingConfig } from '@lumiarq/framework';
+import { env } from '@/bootstrap/env';
 
 export default {
+  level: env.LOG_LEVEL,
   default: 'console',
+  prettify: env.NODE_ENV !== 'production',
   channels: {
     console: {
       driver: 'console',
-      level: process.env.LOG_LEVEL ?? 'info',
+    },
+    file: {
+      driver: 'file',
+      path: 'storage/logs/lumiarq.log',
     },
   },
 } satisfies LoggingConfig;
 ```
+
+The runtime reads this file from `config/logging.ts` (or `.mjs`, `.js`, `.cjs`, `.json`) during boot. If no file is present, it falls back to a safe default console logger.
 
 ---
 
@@ -313,6 +329,7 @@ const envSchema = z.object({
   NODE_ENV: z.string().default('development'),
   APP_ENV: z.string().default('local'),
   APP_URL: z.string().url(),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   APP_NAME: z.string().optional(),
   APP_DEBUG: z.string().optional(),
   DATABASE_URL: z.string(),
@@ -327,7 +344,7 @@ export const env = envSchema.parse(process.env);
 
 If any required variable is absent or fails its Zod constraint, the application exits immediately with a structured error listing every failing field. This makes deployment failures from misconfigured environments easy to diagnose.
 
-The `env` export is available to config files, but since config files themselves are just TypeScript modules, you can also read `process.env` directly when the value is not covered by the schema. The convention in the generated project is to use `process.env.X ?? 'fallback'` directly in config files, which keeps the config file self-contained and readable.
+Use the typed `env` export in config files and application code instead of reading `process.env` directly. This keeps environment access validated, centralized, and type-safe.
 
 ---
 

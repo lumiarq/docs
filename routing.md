@@ -10,9 +10,12 @@ draft: false
 
 - [Introduction](#introduction)
 - [File Convention](#file-convention)
+- [Route Versioning](#route-versioning)
 - [The Route DSL](#the-route-dsl)
 - [Defining Web Routes](#defining-web-routes)
 - [Defining API Routes](#defining-api-routes)
+- [Route Groups](#route-groups)
+- [Resource Routes](#resource-routes)
 - [Route Options](#route-options)
 - [Rendering Strategies](#rendering-strategies)
 - [Named Routes and URL Generation](#named-routes-and-url-generation)
@@ -32,14 +35,77 @@ Lumiarq uses a Domain-Specific Language (DSL)-style route builder rather than fi
 <a name="file-convention"></a>
 ## File Convention
 
-The file suffix determines the route type:
+The file suffix determines the route type and the security constraints the framework enforces:
 
-| File | Route type | Auth | CSRF |
+| File suffix | Route type | Auth | CSRF |
 |---|---|---|---|
 | `*.web.ts` | Web (browser) routes | Session cookie | Yes |
 | `*.api.ts` | API routes | JWT Bearer token | No |
 
-The framework infers these constraints from the filename at startup and enforces them. A web route file that defines an API-style route (missing CSRF configuration) produces an `InvalidApiRouteError`. A route file with neither suffix produces a `MissingRenderStrategyError`.
+The framework infers these constraints from the filename at startup. A web route file that defines an API-style route produces an `InvalidApiRouteError`. A route file with neither suffix produces a `MissingRenderStrategyError`.
+
+You can have as many route files per module as you like — the framework scans all files matching either suffix pattern inside `http/routes/`.
+
+<a name="route-versioning"></a>
+## Route Versioning
+
+LumiARQ supports two complementary approaches to API versioning. You can use either or both in the same project.
+
+### Versioning by filename
+
+Prefix the filename with the version: `v1.api.ts`, `v2.api.ts`. The framework picks up any file whose name ends in `.api.ts` or `.web.ts`, regardless of what comes before the suffix.
+
+```
+src/modules/Billing/http/routes/
+├── v1.api.ts     ← /api/v1/billing/...
+├── v2.api.ts     ← /api/v2/billing/...
+└── billing.web.ts
+```
+
+This is the **zero-config approach**: no code change needed to introduce a new version — just create the file and define routes with the appropriate prefix in the path. It also makes it immediately obvious which files to delete when deprecating a version.
+
+```ts
+// src/modules/Billing/http/routes/v1.api.ts
+import { Route } from '@lumiarq/framework'
+import { listInvoicesV1Handler } from '../handlers/list-invoices-v1.handler'
+
+Route.get('/api/v1/billing/invoices', listInvoicesV1Handler, {
+  name: 'v1.billing.invoices.index',
+  render: 'dynamic',
+})
+```
+
+```ts
+// src/modules/Billing/http/routes/v2.api.ts
+import { Route } from '@lumiarq/framework'
+import { listInvoicesHandler } from '../handlers/list-invoices.handler'
+
+Route.get('/api/v2/billing/invoices', listInvoicesHandler, {
+  name: 'v2.billing.invoices.index',
+  render: 'dynamic',
+})
+```
+
+Similarly for web routes, `v1.web.ts` and `v2.web.ts` are valid filenames.
+
+### Versioning by folder
+
+Group version-specific routes into subdirectories:
+
+```
+src/modules/Billing/http/routes/
+├── v1/
+│   └── billing.api.ts    ← /api/v1/billing/...
+├── v2/
+│   └── billing.api.ts    ← /api/v2/billing/...
+└── billing.web.ts
+```
+
+This works well when a version has many route files — the folder boundary makes the scope explicit and lets you co-locate version-specific handlers nearby.
+
+### Versioning with `Route.group()`
+
+For programmatic control — shared middleware, deprecation headers, or deriving the prefix from config — use `Route.group()`. See [Route Groups](#route-groups) below.
 
 <a name="the-route-dsl"></a>
 ## The Route DSL
@@ -108,6 +174,150 @@ Route.delete('/api/billing/invoices/:id', deleteInvoiceHandler, {
 })
 ```
 
+<a name="route-groups"></a>
+## Route Groups
+
+`Route.group()` applies shared options — a path prefix, middleware, or version — to a set of routes without repeating them on each individual registration. The callback receives no arguments; routes registered inside it inherit the group's options.
+
+```ts
+// src/modules/Billing/http/routes/v2.api.ts
+import { Route } from '@lumiarq/framework'
+import { requireAuth } from '@shared/middleware/require-auth.middleware'
+import { listInvoicesHandler } from '../handlers/list-invoices.handler'
+import { showInvoiceHandler } from '../handlers/show-invoice.handler'
+import { createInvoiceHandler } from '../handlers/create-invoice.handler'
+import { deleteInvoiceHandler } from '../handlers/delete-invoice.handler'
+
+Route.group({ prefix: '/api/v2', middleware: [requireAuth] }, () => {
+  Route.get('/billing/invoices', listInvoicesHandler, {
+    name: 'v2.billing.invoices.index',
+    render: 'dynamic',
+  })
+
+  Route.get('/billing/invoices/:id', showInvoiceHandler, {
+    name: 'v2.billing.invoices.show',
+    render: 'dynamic',
+  })
+
+  Route.post('/billing/invoices', createInvoiceHandler, {
+    name: 'v2.billing.invoices.store',
+    render: 'dynamic',
+  })
+
+  Route.delete('/billing/invoices/:id', deleteInvoiceHandler, {
+    name: 'v2.billing.invoices.destroy',
+    render: 'dynamic',
+  })
+})
+```
+
+Groups resolve their prefix by prepending it to each route's path. Middleware listed in the group runs before route-level middleware but after module-level middleware.
+
+**Groups can be nested.** A nested group's prefix is appended to the parent's:
+
+```ts
+Route.group({ prefix: '/api/v2', middleware: [requireAuth] }, () => {
+  Route.group({ prefix: '/admin', middleware: [requireAdmin] }, () => {
+    Route.get('/billing/invoices', adminListInvoicesHandler, {
+      name: 'v2.admin.billing.invoices.index',
+      render: 'dynamic',
+    })
+    // resolves to: /api/v2/admin/billing/invoices
+  })
+})
+```
+
+### Group options
+
+| Option | Type | Description |
+|---|---|---|
+| `prefix` | `string` | Path prefix prepended to every route in the group. |
+| `middleware` | `Middleware[]` | Middleware applied to every route in the group. |
+| `name` | `string` | Name prefix prepended to every route name in the group. |
+| `version` | `number` | Semantic version tag — used by `route:list` and deprecation middleware. |
+
+### Deprecating a version
+
+Pass `deprecated: true` to a group (or set it on individual routes) to signal that the version is sunset. The framework automatically injects a `Deprecation` and `Sunset` response header on every matched route.
+
+```ts
+Route.group({ prefix: '/api/v1', version: 1, deprecated: true, sunset: '2026-01-01' }, () => {
+  Route.get('/billing/invoices', listInvoicesV1Handler, {
+    name: 'v1.billing.invoices.index',
+    render: 'dynamic',
+  })
+})
+// All v1 responses include:
+// Deprecation: true
+// Sunset: Sun, 01 Jan 2026 00:00:00 GMT
+```
+
+<a name="resource-routes"></a>
+## Resource Routes
+
+`Route.resource()` registers a full set of CRUD routes for a resource with one call, following LumiARQ's naming conventions.
+
+```ts
+import { Route } from '@lumiarq/framework'
+import * as InvoiceHandlers from '../handlers/invoice.handlers'
+
+Route.resource('/billing/invoices', InvoiceHandlers, {
+  render: 'dynamic',
+})
+```
+
+This registers the following routes automatically:
+
+| Method | Path | Handler export | Route name |
+|---|---|---|---|
+| `GET` | `/billing/invoices` | `index` | `billing.invoices.index` |
+| `GET` | `/billing/invoices/create` | `create` | `billing.invoices.create` |
+| `POST` | `/billing/invoices` | `store` | `billing.invoices.store` |
+| `GET` | `/billing/invoices/:id` | `show` | `billing.invoices.show` |
+| `GET` | `/billing/invoices/:id/edit` | `edit` | `billing.invoices.edit` |
+| `PUT` | `/billing/invoices/:id` | `update` | `billing.invoices.update` |
+| `DELETE` | `/billing/invoices/:id` | `destroy` | `billing.invoices.destroy` |
+
+The handler file exports a named function per action:
+
+```ts
+// src/modules/Billing/http/handlers/invoice.handlers.ts
+import { defineHandler } from '@lumiarq/framework'
+
+export const index   = defineHandler(async (ctx) => { /* list */ })
+export const create  = defineHandler(async (ctx) => { /* new form */ })
+export const store   = defineHandler(async (ctx) => { /* persist */ })
+export const show    = defineHandler(async (ctx) => { /* single record */ })
+export const edit    = defineHandler(async (ctx) => { /* edit form */ })
+export const update  = defineHandler(async (ctx) => { /* update */ })
+export const destroy = defineHandler(async (ctx) => { /* delete */ })
+```
+
+**Limiting resource actions** — use `only` or `except` to register a subset:
+
+```ts
+// Register only index + show
+Route.resource('/billing/invoices', InvoiceHandlers, {
+  render: 'dynamic',
+  only: ['index', 'show'],
+})
+
+// Register everything except create + edit (useful for API-only resources)
+Route.resource('/api/v2/billing/invoices', InvoiceHandlers, {
+  render: 'dynamic',
+  except: ['create', 'edit'],
+})
+```
+
+**API resources** — `Route.apiResource()` is shorthand for `except: ['create', 'edit']`, since those actions serve HTML forms which don't exist in pure JSON APIs:
+
+```ts
+Route.apiResource('/api/v2/billing/invoices', InvoiceHandlers, {
+  render: 'dynamic',
+})
+// Registers: index, store, show, update, destroy
+```
+
 <a name="route-options"></a>
 ## Route Options
 
@@ -120,7 +330,9 @@ Every route registration accepts an options object:
 | `revalidate` | `number \| false` | No | ISR revalidation interval in seconds. Only valid with `render: 'static'`. `false` disables revalidation (pure SSG). |
 | `meta` | `(ctx) => MetaData` | No | Function returning SEO metadata (title, description, og, jsonLd). |
 | `bind` | `Record<string, BindingDefinition>` | No | Route model bindings. |
-| `middleware` | `string[]` | No | Route-specific middleware names. |
+| `middleware` | `Middleware[]` | No | Route-specific middleware. Runs after group and module middleware. |
+| `deprecated` | `boolean` | No | Marks the route as deprecated. Injects `Deprecation: true` response header. |
+| `sunset` | `string` | No | ISO 8601 date after which the route will be removed. Injects a `Sunset` response header. |
 
 <a name="rendering-strategies"></a>
 ## Rendering Strategies
@@ -252,10 +464,21 @@ If `invoiceBinding` returns `null`, the framework responds with `404 Not Found` 
 ## Generating Route Files
 
 ```bash
+# Standard web + API stubs
 pnpm lumis make:route Billing
+
+# Versioned — creates v2.api.ts
+pnpm lumis make:route Billing --api --version 2
+
+# Resource route — creates the handler file with all 7 exports pre-filled
+pnpm lumis make:route Billing --resource
 ```
 
-This creates `billing.web.ts` and `billing.api.ts` stubs inside `src/modules/Billing/http/routes/`.
+`make:route Billing` without flags creates `billing.web.ts` and `billing.api.ts` stubs inside `src/modules/Billing/http/routes/`.
+
+`--version 2` prefixes the filename: `v2.api.ts` or `v2.web.ts`.
+
+`--resource` creates both the route file with a `Route.resource()` call and the handler file with named `index`, `create`, `store`, `show`, `edit`, `update`, and `destroy` exports.
 
 <a name="inspecting-registered-routes"></a>
 ## Inspecting Registered Routes
@@ -265,10 +488,17 @@ pnpm lumis route:list
 ```
 
 ```
-METHOD  PATH                        HANDLER                    MIDDLEWARE  RENDER       MODULE
-GET     /billing/invoices           listInvoicesHandler        auth        dynamic      Billing
-POST    /billing/invoices           createInvoiceHandler       auth        dynamic      Billing
-GET     /billing/invoices/:id       showInvoiceHandler         auth        dynamic      Billing
+METHOD  PATH                          HANDLER                  MIDDLEWARE  RENDER    VERSION  MODULE
+GET     /api/v1/billing/invoices      listInvoicesV1Handler    auth        dynamic   v1 ⚠    Billing
+GET     /api/v2/billing/invoices      listInvoicesHandler      auth        dynamic   v2       Billing
+POST    /api/v2/billing/invoices      createInvoiceHandler     auth        dynamic   v2       Billing
+GET     /api/v2/billing/invoices/:id  showInvoiceHandler       auth        dynamic   v2       Billing
+```
+
+The `⚠` marker appears on deprecated routes. Use `--deprecated` to filter to deprecated routes only:
+
+```bash
+pnpm lumis route:list --deprecated
 ```
 
 Use `--json` for machine-readable output:

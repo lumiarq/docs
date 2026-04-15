@@ -27,6 +27,7 @@ Database connections are configured in `config/database.ts`:
 
 ```typescript
 import type { DatabaseConfig } from '@lumiarq/framework'
+import { env } from '@/bootstrap/env'
 
 export default {
   default: 'sqlite',
@@ -34,12 +35,12 @@ export default {
   connections: {
     sqlite: {
       driver: 'better-sqlite3',
-      url: process.env.DATABASE_URL ?? 'file:./dev.db',
+      url: env.DATABASE_URL ?? 'file:./dev.db',
     },
 
     pg: {
       driver: 'postgres',
-      url: process.env.PG_DATABASE_URL,
+      url: env.PG_DATABASE_URL,
       pool: {
         min: 2,
         max: 10,

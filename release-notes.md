@@ -163,12 +163,13 @@ Application configuration uses TypeScript's `satisfies` operator for full type s
 ```typescript
 // config/app.ts
 import type { AppConfig } from '@lumiarq/framework';
+import { env } from '@/bootstrap/env';
 
 export default {
   name: 'My App',
-  url: process.env.APP_URL ?? 'http://localhost:3001',
-  env: process.env.APP_ENV ?? 'local',
-  debug: process.env.APP_DEBUG === 'true',
+  url: env.APP_URL,
+  env: env.APP_ENV,
+  debug: env.APP_DEBUG === 'true',
   locale: 'en',
 } satisfies AppConfig;
 ```

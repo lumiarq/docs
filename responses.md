@@ -95,8 +95,9 @@ Redirect to the previous page (using the `Referer` header) with a fallback:
 
 ```typescript
 import { buildBackResponse } from '@lumiarq/framework'
+import { env } from '@/bootstrap/env'
 
-return buildBackResponse(ctx.req.raw, '/dashboard', process.env.APP_URL!)
+return buildBackResponse(ctx.req.raw, '/dashboard', env.APP_URL)
 ```
 
 <a name="text-responses"></a>

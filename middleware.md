@@ -106,10 +106,11 @@ Mounts a session store and makes the session available via `ctx.get('session')`:
 ```ts
 import { sessionMiddleware } from '@lumiarq/framework'
 import { InMemorySessionStore } from '@lumiarq/framework'
+import { env } from '@/bootstrap/env'
 
 const session = sessionMiddleware({
   store: new InMemorySessionStore(),
-  secret: process.env.SESSION_SECRET!,
+  secret: env.SESSION_SECRET,
   cookieName: 'sid',
 })
 ```

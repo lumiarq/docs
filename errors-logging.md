@@ -154,31 +154,27 @@ Logging is configured in `config/logging.ts`:
 
 ```typescript
 import type { LoggingConfig } from '@lumiarq/framework'
+import { env } from '@/bootstrap/env'
 
 export default {
+  level: env.LOG_LEVEL,
   default: 'console',
+  prettify: env.NODE_ENV !== 'production',
 
   channels: {
     console: {
       driver: 'console',
-      level: process.env.LOG_LEVEL ?? 'info',
-      format: process.env.APP_ENV === 'production' ? 'json' : 'pretty',
     },
 
     file: {
       driver: 'file',
-      path: 'logs/app.log',
-      level: 'warning',
-      format: 'json',
-    },
-
-    stack: {
-      driver: 'stack',
-      channels: ['console', 'file'],
+      path: 'storage/logs/lumiarq.log',
     },
   },
 } satisfies LoggingConfig
 ```
+
+At boot, LumiARQ resolves logging config from `config/logging.ts` (or `.mjs`, `.js`, `.cjs`, `.json`). If no config file is found, runtime logging defaults to a console channel.
 
 ### Log Levels
 
@@ -188,19 +184,10 @@ Levels follow the standard syslog severity scale, from most to least verbose:
 |-------|-------------|
 | `debug` | Detailed diagnostic information for development |
 | `info` | Normal operational messages (requests, events) |
-| `notice` | Notable events that are not errors |
-| `warning` | Unexpected situations that do not stop the request |
+| `warn` | Unexpected situations that do not stop the request |
 | `error` | Errors that cause a request to fail |
-| `critical` | System-level failures (database unreachable, disk full) |
 
-Set `LOG_LEVEL=debug` in development and `LOG_LEVEL=warning` or `LOG_LEVEL=error` in production.
-
-### Log Formats
-
-- `pretty` — Coloured, human-readable output for local development
-- `json` — Structured JSON output for log aggregators (Datadog, CloudWatch, Loki)
-
-Always use `json` format in production so log lines are parseable by your observability platform.
+Set `LOG_LEVEL=debug` in development and `LOG_LEVEL=warn` or `LOG_LEVEL=error` in production.
 
 <a name="structured-logging"></a>
 ## Structured Logging

@@ -33,19 +33,20 @@ Mail settings live in `config/mail.ts`. Create or update this file to match your
 ```typescript
 // config/mail.ts
 import type { MailConfig } from '@lumiarq/framework'
+import { env } from '@/bootstrap/env'
 
 export default {
   driver: 'smtp',
-  host: process.env.MAIL_HOST ?? 'smtp.mailtrap.io',
-  port: Number(process.env.MAIL_PORT ?? 587),
-  secure: process.env.MAIL_SECURE === 'true',
+  host: env.MAIL_HOST ?? 'smtp.mailtrap.io',
+  port: Number(env.MAIL_PORT ?? 587),
+  secure: env.MAIL_SECURE === 'true',
   auth: {
-    user: process.env.MAIL_USER ?? '',
-    pass: process.env.MAIL_PASS ?? '',
+    user: env.MAIL_USER ?? '',
+    pass: env.MAIL_PASS ?? '',
   },
   from: {
-    address: process.env.MAIL_FROM_ADDRESS ?? 'no-reply@example.com',
-    name: process.env.MAIL_FROM_NAME ?? 'My App',
+    address: env.MAIL_FROM_ADDRESS ?? 'no-reply@example.com',
+    name: env.MAIL_FROM_NAME ?? 'My App',
   },
 } satisfies MailConfig
 ```
@@ -162,8 +163,10 @@ Set `driver: 'log'` (or read it from an environment variable) during local devel
 
 ```typescript
 // config/mail.ts
+import { env } from '@/bootstrap/env'
+
 export default {
-  driver: process.env.MAIL_DRIVER ?? 'log',
+  driver: env.MAIL_DRIVER ?? 'log',
   // ...rest of config
 } satisfies MailConfig
 ```
@@ -215,6 +218,7 @@ and a plain-text fallback for clients that don't render HTML:
 // src/modules/Auth/logic/tasks/send-welcome-email.task.ts
 import { defineTask } from '@lumiarq/framework'
 import { mailer } from '@bootstrap/providers'
+import { env } from '@/bootstrap/env'
 import { render as renderHtml } from '@storage/framework/cache/views/welcome-email.veil'
 import { loadLocale } from '@lumiarq/framework/veil'
 
@@ -230,9 +234,9 @@ export const sendWelcomeEmail = defineTask(async (payload: SendWelcomeEmailPaylo
 
   await mailer.send({
     to:      payload.to,
-    subject: `Welcome to ${process.env.APP_NAME}, ${payload.name}!`,
+    subject: `Welcome to ${env.APP_NAME}, ${payload.name}!`,
     html,
-    text:    `Hi ${payload.name},\n\nWelcome to ${process.env.APP_NAME}!\n\nGet started: ${process.env.APP_URL}/getting-started`,
+    text:    `Hi ${payload.name},\n\nWelcome to ${env.APP_NAME}!\n\nGet started: ${env.APP_URL}/getting-started`,
   })
 })
 ```
