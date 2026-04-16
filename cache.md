@@ -10,6 +10,7 @@ draft: false
 
 - [Introduction](#introduction)
 - [Configuration](#configuration)
+- [Redis Driver](#redis-driver)
 - [Registering a Cache Provider](#registering-a-cache-provider)
 - [Reading and Writing](#reading-and-writing)
 - [The `remember` Pattern](#the-remember-pattern)
@@ -28,40 +29,102 @@ Lumiarq provides a unified caching interface through `CacheContract`. Your appli
 <a name="configuration"></a>
 ## Configuration
 
-Configure caching in `config/cache.ts`:
+Configure caching in `config/cache.ts`. Scaffold it with:
 
-```typescript
-import type { CacheConfig } from '@lumiarq/framework'
-import { env } from '@/bootstrap/env'
-
-export default {
-  default: 'redis',
-
-  stores: {
-    redis: {
-      driver: 'redis',
-      url: env.REDIS_URL ?? 'redis://localhost:6379',
-      prefix: 'myapp:',
-      ttl: 3600,        // Default TTL in seconds
-    },
-
-    memory: {
-      driver: 'memory',
-      prefix: 'myapp:',
-      ttl: 300,
-    },
-
-    file: {
-      driver: 'file',
-      path: '.cache',
-      prefix: 'myapp:',
-      ttl: 86400,
-    },
-  },
-} satisfies CacheConfig
+```bash
+pnpm lumis publish config cache
 ```
 
-The `default` key names the store that is injected when you resolve `CacheContract` without specifying a store explicitly.
+The generated stub:
+
+```typescript
+// config/cache.ts
+import { env } from '../bootstrap/env.js';
+
+const cache = {
+  driver: env.CACHE_DRIVER ?? 'memory',
+  ttl: Number(env.CACHE_TTL ?? 3600),
+  redis: {
+    host: env.REDIS_HOST ?? '127.0.0.1',
+    port: Number(env.REDIS_PORT ?? 6379),
+    password: env.REDIS_PASSWORD,
+    db: Number(env.REDIS_DB ?? 0),
+    keyPrefix: env.CACHE_PREFIX ?? 'cache:',
+  },
+} as const;
+
+export default cache;
+```
+
+**Available drivers:**
+
+| Driver | Description |
+|---|---|
+| `memory` | In-process `Map`. Fast, zero dependencies. Data is lost on restart. Ideal for development and testing. |
+| `redis` | Production-grade. Persists across restarts and is shared between all server instances. Requires `ioredis`. |
+
+Set `CACHE_DRIVER=redis` in your `.env` to switch to Redis.
+
+<a name="redis-driver"></a>
+## Redis Driver
+
+The `RedisCacheDriver` from `@lumiarq/framework/runtime` wraps `ioredis` with the `CacheContract` interface. It uses a lazy dynamic import so `ioredis` is only loaded when the Redis driver is actually configured.
+
+**Install ioredis:**
+
+```bash
+pnpm add ioredis
+```
+
+**Constructor:**
+
+```typescript
+import { RedisCacheDriver } from '@lumiarq/framework/runtime'
+
+const redisCache = new RedisCacheDriver({
+  host: '127.0.0.1',      // required
+  port: 6379,             // required
+  password: undefined,    // optional
+  db: 0,                  // optional, default 0
+  keyPrefix: 'cache:',    // optional key namespace
+})
+```
+
+**Registering in `bootstrap/providers.ts`:**
+
+```typescript
+// bootstrap/providers.ts
+import { RedisCacheDriver } from '@lumiarq/framework/runtime'
+import cacheConfig from '../config/cache.js'
+
+export let cache: RedisCacheDriver
+
+export async function bootProviders() {
+  if (cacheConfig.driver === 'redis') {
+    cache = new RedisCacheDriver(cacheConfig.redis)
+  } else {
+    // Fall back to the built-in in-memory driver
+    const { MemoryCacheDriver } = await import('@lumiarq/framework/runtime')
+    cache = new MemoryCacheDriver({ ttl: cacheConfig.ttl })
+  }
+}
+```
+
+**Graceful shutdown:**
+
+Call `driver.disconnect()` in your SIGTERM handler to allow ioredis to close cleanly before the process exits:
+
+```typescript
+// bootstrap/entry.ts
+import { bootProviders, cache } from './providers.js'
+
+await bootProviders()
+
+process.on('SIGTERM', async () => {
+  await cache.disconnect()
+  process.exit(0)
+})
+```
 
 <a name="registering-a-cache-provider"></a>
 ## Registering a Cache Provider

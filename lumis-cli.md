@@ -52,8 +52,12 @@ pnpm lumis module:list
 ```
 
 - `info` prints framework/runtime details.
-- `health` runs built-in environment checks.
-- `doctor` runs project diagnostics (env vars, cache artifacts, module structure, bootstrap files).
+- `health` runs pre-flight checks before delegating to `lumis doctor`:
+  - verifies `bootstrap/entry.ts`, `bootstrap/providers.ts`, and `config/app.ts` are present
+  - checks that `@types/node` is installed
+  - warns if `QUEUE_DRIVER=bullmq` but `bootstrap/worker.ts` is missing
+  - warns if the route cache is stale
+- `doctor` runs deeper project diagnostics (env vars, cache artifacts, module structure, bootstrap files).
 - `module:list` shows discovered modules.
 
 ### Key and config tooling
@@ -102,6 +106,8 @@ pnpm lumis db:migrate
 pnpm lumis db:rollback --steps 1
 pnpm lumis db:seed
 pnpm lumis db:fresh
+pnpm lumis db:reset
+pnpm lumis db:studio
 pnpm lumis db:status
 
 pnpm lumis route:list
@@ -109,6 +115,59 @@ pnpm lumis route:check
 pnpm lumis route:cache
 pnpm lumis route:clear
 ```
+
+- `db:generate` generates migration files from schema changes.
+- `db:migrate` applies pending migrations.
+- `db:rollback --steps 1` reverses the last N migrations.
+- `db:seed` runs `src/shared/database/seeds/index.ts` (or the `db:seed` script in `package.json`).
+- `db:fresh` pushes the schema (force), migrates, then seeds. **Use with care in production** — this is a destructive operation.
+- `db:reset` drops all tables and re-runs migrations. Does **not** seed. Useful for a clean slate without test data.
+- `db:studio` opens Drizzle Kit Studio in the browser for visual schema inspection and query editing.
+- `db:status` reports which migrations have been applied.
+
+### Config publishing
+
+Scaffold typed configuration files into `config/` using `lumis publish config`:
+
+```shell
+pnpm lumis publish config mail
+pnpm lumis publish config cache
+pnpm lumis publish config all
+pnpm lumis publish config list
+pnpm lumis publish config mail --force
+```
+
+- `lumis publish config <name>` copies a freshly generated, typed config template to `config/<name>.ts`. The stub imports `env` from `bootstrap/env.ts` and uses the `as const` pattern.
+- Available names: `mail`, `queue`, `cache`, `storage`, `session`, `security`, `logging`, `auth`.
+- `lumis publish config all` publishes all eight config files at once — useful when bootstrapping a new project.
+- `lumis publish config list` shows which configs are available and which are already present in `config/`.
+- `--force` overwrites an existing file. Without it, `publish config` skips files that already exist and prints a notice.
+
+See the [Configuration](/docs/configuration#publishing-config-files) documentation for the full stub format for each file.
+
+### Worker commands
+
+```shell
+pnpm lumis worker:start
+pnpm lumis worker:start --dev
+pnpm lumis worker:list
+```
+
+- `worker:start` starts the background worker process. In production this runs `.arc/node/worker.js` — the compiled worker bundle.
+- `worker:start --dev` runs `bootstrap/worker.ts` directly via `tsx`, watching for file changes. Use this during local development.
+- `worker:list` lists running worker processes and all registered scheduled jobs with their cron expressions and last/next run times.
+
+The worker process is separate from the HTTP server. Both can run concurrently. See [Workers](/docs/workers) for the full setup guide.
+
+### Schedule commands
+
+```shell
+pnpm lumis schedule:list
+pnpm lumis schedule:run <name>
+```
+
+- `schedule:list` prints all cron jobs registered in `bootstrap/schedule.ts`, including their schedule expression and next calculated run time.
+- `schedule:run <name>` triggers a named scheduled job immediately, bypassing its cron timer. Useful for manual testing or one-off execution without waiting for the next scheduled window.
 
 ### Views and search index
 

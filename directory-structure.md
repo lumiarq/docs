@@ -55,13 +55,16 @@ my-app/
 <a name="the-bootstrap-directory"></a>
 ### The `bootstrap` Directory
 
-The `bootstrap` directory wires the application together before the first request arrives. It contains three files:
+The `bootstrap` directory wires the application together before the first request arrives.
 
 | File | Purpose |
 |---|---|
 | `entry.ts` | Application entry point. Calls `boot()` and exports the adapter. |
 | `env.ts` | Declares and validates all environment variables with Zod. |
 | `providers.ts` | Registers framework service providers (logger, cache, mailer, queue, etc.). |
+| `middleware.ts` | Registers global middleware applied to all HTTP routes. New in v1.0. |
+| `worker.ts` | Background worker entrypoint. Initialises BullMQ workers and the CronScheduler. Started separately from the HTTP server via `lumis worker:start`. |
+| `schedule.ts` | Registers cron jobs against the scheduler exported from `bootstrap/providers.ts`. Imported by the worker process. |
 
 You normally only edit `providers.ts` when adding or swapping infrastructure services, and `env.ts` when adding new environment variables. The `entry.ts` file rarely needs touching.
 

@@ -10,6 +10,8 @@ draft: false
 
 - [Introduction](#introduction)
 - [Queue Configuration](#queue-configuration)
+- [BullMQ Driver](#bullmq-driver)
+- [Processing Jobs](#processing-jobs)
 - [Registering the Queue in Providers](#registering-the-queue-in-providers)
 - [Dispatching Jobs](#dispatching-jobs)
 - [The QueueContract Interface](#the-queuecontract-interface)
@@ -26,30 +28,109 @@ Queues let you defer time-consuming or non-critical work to run outside of the H
 <a name="queue-configuration"></a>
 ## Queue Configuration
 
-Queue settings live in `config/queue.ts`:
+Queue settings live in `config/queue.ts`. Scaffold it with:
+
+```bash
+pnpm lumis publish config queue
+```
+
+The generated stub:
 
 ```typescript
 // config/queue.ts
-import type { QueueConfig } from '@lumiarq/framework'
-import { env } from '@/bootstrap/env'
+import { env } from '../bootstrap/env.js';
 
-export default {
+const queue = {
   driver: env.QUEUE_DRIVER ?? 'sync',
-  connection: {
-    host: env.REDIS_HOST ?? '127.0.0.1',
-    port: Number(env.REDIS_PORT ?? 6379),
-    password: env.REDIS_PASSWORD,
+  bullmq: {
+    connection: {
+      host: env.REDIS_HOST ?? '127.0.0.1',
+      port: Number(env.REDIS_PORT ?? 6379),
+      password: env.REDIS_PASSWORD,
+    },
   },
-  defaultQueue: 'default',
-  queues: {
-    default: { concurrency: 5 },
-    emails: { concurrency: 2 },
-    reports: { concurrency: 1 },
-  },
-} satisfies QueueConfig
+  defaultQueue: env.QUEUE_DEFAULT ?? 'default',
+} as const;
+
+export default queue;
 ```
 
-The `driver` field controls the backend. Use `'sync'` locally — jobs run immediately in the same process without a Redis connection. Switch to `'redis'` (or another supported driver) in staging and production.
+The `driver` field controls the backend. Use `'sync'` locally — jobs run immediately in the same process without a Redis connection. Switch to `'bullmq'` in staging and production.
+
+<a name="bullmq-driver"></a>
+## BullMQ Driver
+
+`BullMQQueue` from `@lumiarq/framework/runtime` implements `QueueContract` using [BullMQ](https://docs.bullmq.io/) and `ioredis`. It uses a lazy dynamic import so neither package is loaded until the BullMQ driver is active.
+
+**Install dependencies:**
+
+```bash
+pnpm add bullmq ioredis
+```
+
+**Constructor:**
+
+```typescript
+import { BullMQQueue } from '@lumiarq/framework/runtime'
+
+const queue = new BullMQQueue({
+  connection: {
+    host: '127.0.0.1',
+    port: 6379,
+    password: undefined,  // optional
+  },
+  defaultQueue: 'default',  // optional, defaults to 'default'
+})
+```
+
+**Dispatching with options:**
+
+`queue.dispatch(jobName, data, options?)` accepts per-job options as a third argument:
+
+```typescript
+await queue.dispatch('send-welcome-email', { userId: '42' }, {
+  queue: 'emails',       // target a named queue (defaults to defaultQueue)
+  delay: 5000,           // ms delay before the job becomes active
+  attempts: 3,           // max retry attempts
+  backoff: { type: 'exponential', delay: 1000 },
+})
+```
+
+**Registering in `bootstrap/providers.ts`:**
+
+```typescript
+// bootstrap/providers.ts
+import { BullMQQueue } from '@lumiarq/framework/runtime'
+import queueConfig from '../config/queue.js'
+
+export let queue: BullMQQueue
+
+export async function bootProviders() {
+  queue = new BullMQQueue({
+    connection: queueConfig.bullmq.connection,
+    defaultQueue: queueConfig.defaultQueue,
+  })
+}
+```
+
+<a name="processing-jobs"></a>
+## Processing Jobs
+
+Dispatching a job adds it to a Redis list. A **separate worker process** consumes jobs from that list and runs them. The HTTP server and worker process are independent — both can scale independently.
+
+Start the worker locally:
+
+```bash
+pnpm lumis worker:start --dev
+```
+
+In production, the compiled worker bundle is started with:
+
+```bash
+pnpm lumis worker:start
+```
+
+The worker entrypoint lives in `bootstrap/worker.ts`. It registers BullMQ workers for each queue and starts the CronScheduler. See the [Workers](/docs/workers) documentation for the full setup, graceful shutdown, and multi-queue configuration.
 
 <a name="registering-the-queue-in-providers"></a>
 ## Registering the Queue in Providers

@@ -10,6 +10,8 @@ draft: false
 
 - [Introduction](#introduction)
 - [Mail Configuration](#mail-configuration)
+- [SMTP Driver](#smtp-driver)
+- [Resend Driver](#resend-driver)
 - [Registering the Mailer in Providers](#registering-the-mailer-in-providers)
 - [Sending Email Inside an Action or Task](#sending-email-inside-an-action-or-task)
 - [The MailerContract Interface](#the-mailercontract-interface)
@@ -28,30 +30,130 @@ Lumiarq provides a first-class mailer abstraction through the `MailerContract` f
 <a name="mail-configuration"></a>
 ## Mail Configuration
 
-Mail settings live in `config/mail.ts`. Create or update this file to match your environment:
+Mail settings live in `config/mail.ts`. Scaffold it with:
+
+```bash
+pnpm lumis publish config mail
+```
+
+The generated stub:
 
 ```typescript
 // config/mail.ts
-import type { MailConfig } from '@lumiarq/framework'
-import { env } from '@/bootstrap/env'
+import { env } from '../bootstrap/env.js';
 
-export default {
-  driver: 'smtp',
-  host: env.MAIL_HOST ?? 'smtp.mailtrap.io',
-  port: Number(env.MAIL_PORT ?? 587),
-  secure: env.MAIL_SECURE === 'true',
-  auth: {
-    user: env.MAIL_USER ?? '',
-    pass: env.MAIL_PASS ?? '',
+const mail = {
+  driver: env.MAIL_DRIVER ?? 'stub',
+  smtp: {
+    host: env.MAIL_HOST ?? 'localhost',
+    port: Number(env.MAIL_PORT ?? 1025),
+    secure: env.MAIL_SECURE === 'true',
+    user: env.MAIL_USER,
+    pass: env.MAIL_PASS,
+  },
+  resend: {
+    apiKey: env.RESEND_API_KEY ?? '',
   },
   from: {
     address: env.MAIL_FROM_ADDRESS ?? 'no-reply@example.com',
     name: env.MAIL_FROM_NAME ?? 'My App',
   },
-} satisfies MailConfig
+} as const;
+
+export default mail;
 ```
 
-The `driver` field supports any driver your mailer implementation understands. Common values are `'smtp'`, `'ses'`, `'sendgrid'`, and `'log'` (for local development — writes to stdout instead of sending).
+The `driver` field controls which mailer is active. Supported values: `'stub'` (logs to console, default for development), `'smtp'`, `'resend'`.
+
+<a name="smtp-driver"></a>
+## SMTP Driver
+
+`SMTPMailer` from `@lumiarq/framework/runtime` wraps `nodemailer` with the `MailerContract` interface. It uses a lazy dynamic import so `nodemailer` is only loaded when the SMTP driver is configured.
+
+**Install nodemailer:**
+
+```bash
+pnpm add nodemailer && pnpm add -D @types/nodemailer
+```
+
+**Constructor:**
+
+```typescript
+import { SMTPMailer } from '@lumiarq/framework/runtime'
+
+const mailer = new SMTPMailer({
+  host: 'smtp.example.com',
+  port: 587,
+  secure: false,          // true for port 465
+  user: 'user@example.com',
+  pass: 'secret',
+  from: { address: 'no-reply@example.com', name: 'My App' },
+})
+```
+
+**Registering in `bootstrap/providers.ts`:**
+
+```typescript
+// bootstrap/providers.ts
+import { SMTPMailer } from '@lumiarq/framework/runtime'
+import mailConfig from '../config/mail.js'
+
+export let mailer: SMTPMailer
+
+export async function bootProviders() {
+  mailer = new SMTPMailer({
+    ...mailConfig.smtp,
+    from: mailConfig.from,
+  })
+}
+```
+
+<a name="resend-driver"></a>
+## Resend Driver
+
+`ResendMailer` from `@lumiarq/framework/runtime` wraps the official Resend SDK. It uses a lazy dynamic import so the `resend` package is only loaded when the Resend driver is configured.
+
+**Install resend:**
+
+```bash
+pnpm add resend
+```
+
+**Constructor:**
+
+```typescript
+import { ResendMailer } from '@lumiarq/framework/runtime'
+
+const mailer = new ResendMailer({
+  apiKey: 're_xxxxxxxxxxxx',
+  from: { address: 'no-reply@example.com', name: 'My App' },
+})
+```
+
+**Registering in `bootstrap/providers.ts`:**
+
+```typescript
+// bootstrap/providers.ts
+import { SMTPMailer } from '@lumiarq/framework/runtime'
+import { ResendMailer } from '@lumiarq/framework/runtime'
+import mailConfig from '../config/mail.js'
+
+export let mailer: SMTPMailer | ResendMailer
+
+export async function bootProviders() {
+  if (mailConfig.driver === 'resend') {
+    mailer = new ResendMailer({
+      apiKey: mailConfig.resend.apiKey,
+      from: mailConfig.from,
+    })
+  } else {
+    mailer = new SMTPMailer({
+      ...mailConfig.smtp,
+      from: mailConfig.from,
+    })
+  }
+}
+```
 
 <a name="registering-the-mailer-in-providers"></a>
 ## Registering the Mailer in Providers
