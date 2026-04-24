@@ -105,6 +105,7 @@ pnpm lumis db:generate
 pnpm lumis db:migrate
 pnpm lumis db:rollback --steps 1
 pnpm lumis db:seed
+pnpm lumis db:ping
 pnpm lumis db:fresh
 pnpm lumis db:reset
 pnpm lumis db:studio
@@ -120,6 +121,7 @@ pnpm lumis route:clear
 - `db:migrate` applies pending migrations.
 - `db:rollback --steps 1` reverses the last N migrations.
 - `db:seed` runs `src/shared/database/seeds/index.ts` (or the `db:seed` script in `package.json`).
+- `db:ping` checks active database connectivity and prints actionable diagnosis when it fails.
 - `db:fresh` pushes the schema (force), migrates, then seeds. **Use with care in production** — this is a destructive operation.
 - `db:reset` drops all tables and re-runs migrations. Does **not** seed. Useful for a clean slate without test data.
 - `db:studio` opens Drizzle Kit Studio in the browser for visual schema inspection and query editing.
@@ -135,6 +137,8 @@ pnpm lumis publish config cache
 pnpm lumis publish config all
 pnpm lumis publish config list
 pnpm lumis publish config mail --force
+pnpm lumis config:cache
+pnpm lumis config:clear
 ```
 
 - `lumis publish config <name>` copies a freshly generated, typed config template to `config/<name>.ts`. The stub imports `env` from `bootstrap/env.ts` and uses the `as const` pattern.
@@ -142,6 +146,8 @@ pnpm lumis publish config mail --force
 - `lumis publish config all` publishes all eight config files at once — useful when bootstrapping a new project.
 - `lumis publish config list` shows which configs are available and which are already present in `config/`.
 - `--force` overwrites an existing file. Without it, `publish config` skips files that already exist and prints a notice.
+- `config:cache` resolves all project config files and writes a cached artifact.
+- `config:clear` removes the config cache artifact.
 
 See the [Configuration](/docs/configuration#publishing-config-files) documentation for the full stub format for each file.
 
@@ -185,8 +191,20 @@ pnpm lumis search:clear
 
 Draft docs (`draft: true`) are skipped.
 
-### Runtime and deployment
+### Optimize for production
 
+```shell
+pnpm lumis optimize
+pnpm lumis optimize:clear
+```
+
+- `optimize`
+- `optimize:clear`
+
+- `optimize` runs `config:cache`, `route:cache`, `view:cache`, and `search:index` in one command.
+- `optimize:clear` runs `config:clear`, `route:clear`, `view:clear`, and `search:clear` in one command.
+
+### Runtime and deployment
 ```shell
 pnpm lumis serve
 pnpm lumis build --target node
@@ -216,13 +234,25 @@ pnpm lumis stub:publish --all
 
 When you run `pnpm lumis` from a Lumiarq app, you're using the `@illumiarq/lumis` wrapper package, which extends the base `@lumiarq/lumis` CLI with app-specific commands.
 
-The wrapper **intercepts** three runtime commands locally:
+The wrapper **intercepts** LumiARQ app commands locally (runtime + app tooling), including:
 
 - `serve` — compiles views, caches routes, bundles output, starts dev server
 - `build` — with optional `--target` flag (node, cloudflare, static)
 - `preview` — with optional `--target` flag (node, cloudflare, static)
+- `route:*`, `view:*`, `search:*`, `optimize*`
+- `db:*`, `worker:*`, `schedule:*`
+- `auth:install`, `stub:publish`, `publish config`
 
-All other commands (info, health, make:*, db:*, etc.) are **delegated** to the base `@lumiarq/lumis` CLI.
+Core lumis commands (doctor, make, intent, ir, runtime, tinker, etc.) are still delegated to the base `@lumiarq/lumis` CLI.
+
+Project custom commands can be run in two ways:
+
+```shell
+pnpm lumis commands run project docs:reindex
+pnpm lumis docs:reindex
+```
+
+Direct invocation (`pnpm lumis <name>`) works for commands defined in `projectCommands` and does not override built-in wrapper/core command names.
 
 **Flag shortcuts for runtime commands:**
 
